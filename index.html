@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스페이스 스택: 화학 생존 V8</title>
+    <style>
+        :root {
+            --bg-color: #0b0e14;
+            --panel-bg: rgba(22, 27, 34, 0.85);
+            --card-width: 110px;
+            --card-height: 140px;
+            --primary: #4f46e5;
+            --accent: #06b6d4;
+        }
+
+        * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-color);
+            color: #ecf0f1;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 상단 UI 바 */
+        #top-bar {
+            height: 60px;
+            background: var(--panel-bg);
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 1000;
+        }
+
+        .status-group { display: flex; gap: 20px; align-items: center; }
+        .status-item { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .status-val { color: #2ecc71; font-size: 16px; }
+
+        /* 타이머 바 */
+        #sol-bar-container {
+            width: 150px; height: 10px; background: #222; border-radius: 5px; overflow: hidden; border: 1px solid #444;
+        }
+        #sol-bar { width: 0%; height: 100%; background: var(--accent); transition: width 0.1s linear; }
+
+        /* 메인 레이아웃 */
+        #main-container { display: flex; flex: 1; position: relative; overflow: hidden; }
+
+        /* 왼쪽 미션 사이드바 */
+        #mission-sidebar {
+            width: 280px;
+            flex: 0 0 280px;
+            padding: 18px 15px;
+            background: var(--panel-bg);
+            border-right: 1px solid #30363d;
+            z-index: 900;
+        }
+        #mission-sidebar h3 {
+            margin-bottom: 14px;
+            padding-bottom: 8px;
+            color: var(--accent);
+            font-size: 15px;
+            letter-spacing: 0.08em;
+            border-bottom: 1px solid #3f4752;
+        }
+        .mission-card {
+            position: relative;
+            padding: 16px 14px 15px;
+            overflow: hidden;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98));
+            border: 1px solid #38bdf8;
+            border-radius: 10px;
+            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.38), inset 0 0 20px rgba(56, 189, 248, 0.05);
+        }
+        .mission-card::before {
+            content: '❄️';
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            font-size: 24px;
+            opacity: 0.28;
+        }
+        .mission-card + .mission-card { margin-top: 12px; }
+        .survival-mission::before { content: '👨‍🚀'; }
+        .mission-text {
+            padding-right: 24px;
+            color: #f8fafc;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.45;
+        }
+        .mission-formula {
+            margin-top: 13px;
+            padding: 9px 10px;
+            color: #bae6fd;
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+            background: rgba(56, 189, 248, 0.09);
+            border: 1px solid rgba(56, 189, 248, 0.24);
+            border-radius: 6px;
+        }
+
+        /* 게임 보드 */
+        #game-board {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #1a233a 0%, #0b0e14 100%);
+            overflow: hidden;
+        }
+
+        /* 공통 버튼 */
+        .btn {
+            background: var(--primary);
+            color: #fff; border: none; padding: 8px 14px;
+            border-radius: 6px; font-weight: bold; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #6366f1; transform: translateY(-1px); }
+
+        /* 카드 스타일 */
+        .card {
+            width: var(--card-width);
+            height: var(--card-height);
+            position: absolute;
+            background: #1e293b;
+            border: 2px solid #475569;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            cursor: grab;
+            touch-action: none;
+            transition: border-color 0.2s, box-shadow 0.2s, filter 0.2s;
+            z-index: 10;
+        }
+        .card::after {
+            content: '';
+            position: absolute;
+            inset: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.055);
+            border-radius: 5px;
+            pointer-events: none;
+        }
+        .card.is-stacked {
+            box-shadow: 0 2px 0 rgba(255,255,255,0.12), 0 7px 14px rgba(0,0,0,0.48);
+        }
+        .card.stack-tail {
+            box-shadow: 0 3px 0 rgba(255,255,255,0.12), 0 12px 22px rgba(0,0,0,0.62);
+        }
+        .card.is-dragging {
+            cursor: grabbing;
+            filter: brightness(1.08);
+            box-shadow: 0 16px 28px rgba(0,0,0,0.68);
+        }
+        .card.is-settling {
+            transition: left 0.16s ease-out, top 0.16s ease-out,
+                        border-color 0.2s, box-shadow 0.2s, filter 0.2s;
+        }
+        .card-header { font-size: 11px; color: #94a3b8; font-weight: bold; }
+        .card-title { font-size: 14px; font-weight: bold; color: #f8fafc; margin-top: 4px; }
+        .card-formula { font-size: 11px; color: var(--accent); margin-top: 2px; }
+        .card-body { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+        
+        /* 카드 카테고리별 테두리 색상 */
+        .card[data-cat="crew"] { border-color: #f59e0b; background: #2a1f0d; }
+        .card[data-cat="chem"] { border-color: #38bdf8; }
+        .card[data-cat="energy"] { border-color: #facc15; background: #29250d; }
+        .card[data-cat="equip"] { border-color: #a855f7; }
+        .card[data-cat="waste"] { border-color: #ef4444; }
+
+        /* 반응 진행 프로그래스 바 */
+        .progress-overlay {
+            position: absolute; bottom: 0; left: 0; right: 0; height: 6px;
+            background: rgba(0,0,0,0.5); border-bottom-left-radius: 6px; border-bottom-right-radius: 6px;
+            overflow: hidden; display: none;
+        }
+        .progress-inner { width: 0%; height: 100%; background: #22c55e; }
+
+        /* 모달 (승리/패배) */
+        #modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+            display: none; align-items: center; justify-content: center; z-index: 10000;
+        }
+        .modal-content {
+            background: #1e293b; padding: 30px; border-radius: 12px; text-align: center;
+            max-width: 400px; border: 1px solid var(--primary);
+        }
+        .modal-content h2 { margin-bottom: 10px; font-size: 24px; }
+        .modal-content p { margin-bottom: 20px; color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+    <!-- 상단 UI -->
+    <div id="top-bar">
+        <div class="status-group">
+            <div class="status-item">Sol (일수): <span id="sol-val" class="status-val">1</span> / 10</div>
+            <div class="status-item">
+                <div id="sol-bar-container"><div id="sol-bar"></div></div>
+            </div>
+        </div>
+        <div class="status-group">
+            <div class="status-item">👨‍🚀 대원 체력: <span id="hp-val" class="status-val">3/3</span></div>
+        </div>
+    </div>
+
+    <!-- 메인 레이아웃 -->
+    <div id="main-container">
+        <aside id="mission-sidebar" aria-label="현재 미션">
+            <h3>MISSION</h3>
+            <div class="mission-card survival-mission">
+                <div class="mission-text">10일 동안 생존하세요.</div>
+                <div class="mission-formula">우주 비행사는 매일 한 개의 산소가 필요합니다.</div>
+            </div>
+            <div id="ice-mission" class="mission-card">
+                <div class="mission-text">얼음 덩어리를 녹여 물을 만드세요.</div>
+                <div class="mission-formula">얼음 덩어리 + 대원 → 물 (최대 3회)</div>
+            </div>
+        </aside>
+
+        <!-- 카드 영역 -->
+        <div id="game-board"></div>
+    </div>
+
+    <!-- 승리 / 게임오버 모달 -->
+    <div id="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">게임 종료</h2>
+            <p id="modal-desc">결과 메시지</p>
+            <button class="btn" onclick="location.reload()">다시 시작하기</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 카드 데이터 및 레시피 정의 ---
+        const CARD_TYPES = {
+            CREW: { name: "우주비행사", formula: "Crew", cat: "crew", icon: "👨‍🚀" },
+            H2O2: { name: "과산화수소", formula: "H₂O₂", cat: "chem", icon: "🧪" },
+            MNO2: { name: "이산화망가니즈", formula: "MnO₂ (촉매)", cat: "chem", icon: "🪨" },
+            ICE_CHUNK: { name: "얼음 덩어리", formula: "H₂O(s)", cat: "chem", icon: "🧊" },
+            H2O:  { name: "물", formula: "H₂O", cat: "chem", icon: "💧" },
+            O2:   { name: "산소", formula: "O₂", cat: "chem", icon: "🫧" },
+            H2:   { name: "수소", formula: "H₂", cat: "chem", icon: "🎈" },
+            CO2:  { name: "이산화탄소", formula: "CO₂", cat: "waste", icon: "🌫️" },
+            ENERGY: { name: "전기에너지", formula: "전력", cat: "energy", icon: "🔋" },
+            SOLAR: { name: "태양열 발전기", formula: "30초마다 발전", cat: "equip", icon: "☀️" }
+        };
+
+        // 화학 반응 레시피 목록
+        const RECIPES = [
+            {
+                id: "melt_ice",
+                time: 3000,
+                inputs: { ICE_CHUNK: 1, CREW: 1 },
+                consume: {},
+                deplete: { ICE_CHUNK: 1 },
+                outputs: ['H2O']
+            },
+            {
+                id: "h2o2_decomp",
+                time: 3000, // 3초
+                // 조합에 필요한 카드 목록 (타입과 개수)
+                inputs: { H2O2: 2, MNO2: 1, CREW: 1 },
+                // 반응 후 소모되는 카드의 수량
+                consume: { H2O2: 2 },
+                // 새롭게 생성되는 결과물
+                outputs: ['H2O', 'H2O', 'O2']
+            },
+            {
+                id: "electrolysis",
+                time: 4000, // 4초
+                inputs: { H2O: 2, ENERGY: 1 },
+                consume: { H2O: 2, ENERGY: 1 },
+                outputs: ['H2', 'H2', 'O2']
+            }
+        ];
+
+        // --- 2. 게임 상태 변수 ---
+        let cards = [];
+        let cardIdCounter = 1;
+        let currentSol = 1;
+        const maxSol = 10;
+        let crewHp = 3;
+        let solTimer = 0;
+        const solDuration = 60000; // 1Sol당 1분
+        let solarTimer = 0;
+        const solarDuration = 30000;
+        let isGameOver = false;
+        let stackOrderCounter = 0;
+
+        const STACK_OFFSET_Y = 30;
+        const CARD_WIDTH = 110;
+        const CARD_HEIGHT = 140;
+
+        const board = document.getElementById('game-board');
+
+        // --- 3. 초기화 및 생명주기 ---
+        function initGame() {
+            // 초기 스폰 카드 설정
+            spawnCard('CREW', 200, 200);
+            spawnCard('ICE_CHUNK', 350, 200);
+            spawnCard('SOLAR', 500, 200);
+
+            updateUI();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function spawnCard(typeKey, x, y) {
+            const cardData = CARD_TYPES[typeKey];
+            const card = {
+                id: cardIdCounter++,
+                type: typeKey,
+                x: x,
+                y: y,
+                nextId: null, // 아래에 쌓인 카드 ID
+                prevId: null, // 위에 쌓인 카드 ID
+                uses: typeKey === 'ICE_CHUNK' ? 3 : null,
+                stackOrder: ++stackOrderCounter,
+                element: null
+            };
+
+            const el = document.createElement('div');
+            el.className = 'card';
+            el.dataset.id = card.id;
+            el.dataset.cat = cardData.cat;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+
+            el.innerHTML = `
+                <div class="card-header">${cardData.cat.toUpperCase()}</div>
+                <div class="card-title">${cardData.name}</div>
+                <div class="card-formula">${cardData.formula}${card.uses === null ? '' : ` · ${card.uses}회 남음`}</div>
+                <div class="card-body">${cardData.icon}</div>
+                <div class="progress-overlay"><div class="progress-inner"></div></div>
+            `;
+
+            board.appendChild(el);
+            card.element = el;
+            cards.push(card);
+
+            makeDraggable(card);
+            updateAllStackVisuals();
+            return card;
+        }
+
+        // --- 4. 드래그 & 스택 메커니즘 ---
+        function connectCards(upperCard, lowerCard) {
+            upperCard.nextId = lowerCard.id;
+            lowerCard.prevId = upperCard.id;
+        }
+
+        function getStackRoot(card) {
+            const visited = new Set();
+            let curr = card;
+            while (curr && curr.prevId !== null && !visited.has(curr.id)) {
+                visited.add(curr.id);
+                curr = cards.find(c => c.id === curr.prevId);
+            }
+            return curr || card;
+        }
+
+        function updateAllStackVisuals() {
+            const roots = cards
+                .filter(c => c.prevId === null)
+                .sort((a, b) => a.stackOrder - b.stackOrder);
+            let zIndex = 10;
+
+            roots.forEach(root => {
+                const stack = getStackCards(root);
+                stack.forEach((card, depth) => {
+                    card.element.style.zIndex = zIndex++;
+                    card.element.classList.toggle('is-stacked', stack.length > 1);
+                    card.element.classList.toggle('stack-tail', depth === stack.length - 1 && stack.length > 1);
+                });
+                zIndex += 2; // 스택끼리 레이어가 섞이지 않도록 간격 확보
+            });
+        }
+
+        function settleStackFrom(root) {
+            const stack = getStackCards(root);
+            stack.forEach((card, depth) => {
+                card.x = root.x;
+                card.y = root.y + (depth * STACK_OFFSET_Y);
+                card.element.classList.add('is-settling');
+                card.element.style.left = `${card.x}px`;
+                card.element.style.top = `${card.y}px`;
+            });
+            window.setTimeout(() => {
+                stack.forEach(card => card.element?.classList.remove('is-settling'));
+            }, 180);
+        }
+
+        function makeDraggable(card) {
+            let startX, startY, initialCardX, initialCardY;
+            let isDragging = false;
+            let activePointerId = null;
+
+            const el = card.element;
+
+            el.addEventListener('pointerdown', (e) => {
+                if (isGameOver) return;
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                if (isDragging) return;
+                e.preventDefault();
+                isDragging = true;
+                activePointerId = e.pointerId;
+                el.setPointerCapture(e.pointerId);
+                startX = e.clientX;
+                startY = e.clientY;
+                initialCardX = card.x;
+                initialCardY = card.y;
+
+                // 스택 해제 (내 위의 카드가 있다면 분리)
+                if (card.prevId) {
+                    const parentCard = cards.find(c => c.id === card.prevId);
+                    if (parentCard) parentCard.nextId = null;
+                    card.prevId = null;
+                }
+
+                card.stackOrder = ++stackOrderCounter;
+                updateAllStackVisuals();
+
+                // 나를 포함해 내 아래 쌓인 카드들을 최상단 Visual Layer로 올림
+                let curr = card;
+                let z = 5000;
+                while(curr) {
+                    curr.element.style.zIndex = z++;
+                    curr.element.classList.add('is-dragging');
+                    curr = cards.find(c => c.id === curr.nextId);
+                }
+
+                document.addEventListener('pointermove', onPointerMove);
+                document.addEventListener('pointerup', onPointerUp);
+                document.addEventListener('pointercancel', onPointerUp);
+            });
+
+            function onPointerMove(e) {
+                if (!isDragging || e.pointerId !== activePointerId) return;
+                e.preventDefault();
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+
+                // 연결된 전체 스택 이동
+                let curr = card;
+                let offsetY = 0;
+                while (curr) {
+                    curr.x = initialCardX + dx;
+                    curr.y = initialCardY + dy + offsetY;
+                    curr.element.style.left = `${curr.x}px`;
+                    curr.element.style.top = `${curr.y}px`;
+
+                    offsetY += STACK_OFFSET_Y;
+                    curr = cards.find(c => c.id === curr.nextId);
+                }
+            }
+
+            function onPointerUp(e) {
+                if (!isDragging || e.pointerId !== activePointerId) return;
+                isDragging = false;
+                if (el.hasPointerCapture(activePointerId)) el.releasePointerCapture(activePointerId);
+                activePointerId = null;
+                document.removeEventListener('pointermove', onPointerMove);
+                document.removeEventListener('pointerup', onPointerUp);
+                document.removeEventListener('pointercancel', onPointerUp);
+
+                // 스택 결합 감지 (다른 스택의 맨 아래 카드 상단 근처에 놓았는지 확인)
+                checkStackSnap(card);
+
+                getStackCards(card).forEach(c => c.element.classList.remove('is-dragging'));
+                updateAllStackVisuals();
+            }
+        }
+
+        function checkStackSnap(draggedCard) {
+            const draggedIds = new Set(getStackCards(draggedCard).map(c => c.id));
+            const candidateRoots = cards.filter(c => c.prevId === null && !draggedIds.has(c.id));
+            let bestTarget = null;
+            let bestScore = Infinity;
+
+            candidateRoots.forEach(root => {
+                const targetStack = getStackCards(root);
+                const tail = targetStack[targetStack.length - 1];
+                const stackTop = root.y;
+                const stackBottom = tail.y + CARD_HEIGHT;
+                const horizontalGap = Math.abs(draggedCard.x - root.x);
+                const verticallyOverlaps = draggedCard.y + CARD_HEIGHT > stackTop - 18 &&
+                                           draggedCard.y < stackBottom + 18;
+
+                if (horizontalGap < CARD_WIDTH * 0.65 && verticallyOverlaps) {
+                    const targetY = tail.y + STACK_OFFSET_Y;
+                    const score = horizontalGap + Math.abs(draggedCard.y - targetY) * 0.35;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestTarget = { root, tail };
+                    }
+                }
+            });
+
+            if (bestTarget) {
+                connectCards(bestTarget.tail, draggedCard);
+                bestTarget.root.stackOrder = ++stackOrderCounter;
+                settleStackFrom(bestTarget.root);
+            } else {
+                draggedCard.stackOrder = ++stackOrderCounter;
+                settleStackFrom(draggedCard);
+            }
+        }
+
+        // --- 5. 화학 반응 및 게임 루프 엔진 ---
+        let lastTime = performance.now();
+        let activeReactions = new Map(); // rootCardId -> reactionState
+
+        function gameLoop(now) {
+            const dt = now - lastTime;
+            lastTime = now;
+
+            if (!isGameOver) {
+                updateSolTimer(dt);
+                updateSolarGenerator(dt);
+                checkReactions(dt);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 1Sol (하루) 흐름 처리
+        function updateSolTimer(dt) {
+            solTimer += dt;
+            const progress = (solTimer / solDuration) * 100;
+            document.getElementById('sol-bar').style.width = `${Math.min(progress, 100)}%`;
+
+            if (solTimer >= solDuration) {
+                solTimer = 0;
+                endOfSolCycle();
+            }
+        }
+
+        function updateSolarGenerator(dt) {
+            const solar = cards.find(c => c.type === 'SOLAR');
+            if (!solar) return;
+
+            solarTimer += dt;
+            while (solarTimer >= solarDuration) {
+                solarTimer -= solarDuration;
+                const energyCount = cards.filter(c => c.type === 'ENERGY').length;
+                spawnCard('ENERGY', solar.x + 130 + Math.floor(energyCount / 5) * 20, solar.y + (energyCount % 5) * 30);
+            }
+        }
+
+        function endOfSolCycle() {
+            currentSol++;
+
+            const crew = cards.find(c => c.type === 'CREW');
+
+            // 대원의 산소 소비 로직
+            const oxygen = cards.find(c => c.type === 'O2');
+            if (oxygen) {
+                oxygen.element.style.pointerEvents = 'none';
+                oxygen.element.animate([
+                    { transform: 'translate(0, 0)' },
+                    { transform: `translate(${crew.x - oxygen.x}px, ${crew.y - oxygen.y}px)` }
+                ], { duration: 1300, easing: 'ease-in-out', fill: 'forwards' })
+                    .finished.then(() => {
+                        removeCard(oxygen.id);
+                        spawnCard('CO2', crew.x + 130, crew.y);
+                    });
+            } else {
+                // 산소 없음 -> 체력 감손
+                crewHp--;
+                spawnCard('CO2', crew.x + 130, crew.y);
+            }
+
+            updateUI();
+
+            // 승리 / 패배 판정
+            if (crewHp <= 0) {
+                triggerGameOver(false, "산소가 부족하여 대원이 생존하지 못했습니다.");
+            } else if (currentSol > maxSol) {
+                triggerGameOver(true, "🎉 10 Sol 동안 우주기지에서 무사히 생존하였습니다! 구조에 성공했습니다!");
+            }
+        }
+
+        // 스택 탐색 및 화학 반응 실행
+        function checkReactions(dt) {
+            // 모든 독립된 스택의 Root(최상단) 카드를 찾음
+            const rootCards = cards.filter(c => c.prevId === null);
+
+            rootCards.forEach(root => {
+                // 스택 전체 구성 요소 파악
+                const stackCards = getStackCards(root);
+                const counts = {};
+                stackCards.forEach(c => counts[c.type] = (counts[c.type] || 0) + 1);
+
+                // 일치하는 레시피 검사
+                const matchedRecipe = RECIPES.find(recipe => {
+                    for (let [type, reqCount] of Object.entries(recipe.inputs)) {
+                        if ((counts[type] || 0) < reqCount) return false;
+                    }
+                    return true;
+                });
+
+                if (matchedRecipe) {
+                    if (!activeReactions.has(root.id)) {
+                        // 새 반응 시작
+                        activeReactions.set(root.id, {
+                            recipe: matchedRecipe,
+                            progress: 0
+                        });
+                    } else {
+                        // 진행 중인 반응 업데이트
+                        const state = activeReactions.get(root.id);
+                        state.progress += dt;
+
+                        // UI 프로그래스 바 연출 (스택 맨 아래 카드에 표시)
+                        const tailCard = stackCards[stackCards.length - 1];
+                        const progressBar = tailCard.element.querySelector('.progress-overlay');
+                        const progressInner = tailCard.element.querySelector('.progress-inner');
+                        
+                        progressBar.style.display = 'block';
+                        progressInner.style.width = `${Math.min((state.progress / state.recipe.time) * 100, 100)}%`;
+
+                        // 반응 완료시
+                        if (state.progress >= state.recipe.time) {
+                            completeReaction(root, state.recipe, stackCards);
+                            activeReactions.delete(root.id);
+                            progressBar.style.display = 'none';
+                        }
+                    }
+                } else {
+                    // 조합 조건이 더 이상 안 맞으면 진행도 취소
+                    if (activeReactions.has(root.id)) {
+                        const tailCard = stackCards[stackCards.length - 1];
+                        if (tailCard && tailCard.element) {
+                            tailCard.element.querySelector('.progress-overlay').style.display = 'none';
+                        }
+                        activeReactions.delete(root.id);
+                    }
+                }
+            });
+        }
+
+        function getStackCards(root) {
+            const list = [];
+            const visited = new Set();
+            let curr = root;
+            while(curr && !visited.has(curr.id)) {
+                visited.add(curr.id);
+                list.push(curr);
+                curr = cards.find(c => c.id === curr.nextId);
+            }
+            return list;
+        }
+
+        function completeReaction(rootCard, recipe, stackCards) {
+            // 반응물 카드 소모
+            for (let [type, countToConsume] of Object.entries(recipe.consume)) {
+                let consumed = 0;
+                for (let card of stackCards) {
+                    if (card.type === type && consumed < countToConsume) {
+                        removeCard(card.id);
+                        consumed++;
+                    }
+                }
+            }
+
+            for (let [type, countToDeplete] of Object.entries(recipe.deplete || {})) {
+                const card = stackCards.find(c => c.type === type);
+                card.uses -= countToDeplete;
+                if (card.uses === 0) {
+                    removeCard(card.id);
+                } else {
+                    card.element.querySelector('.card-formula').textContent = `${CARD_TYPES[type].formula} · ${card.uses}회 남음`;
+                }
+            }
+
+            // 생성물(Outputs) 카드 스폰
+            recipe.outputs.forEach((outType, idx) => {
+                spawnCard(outType, rootCard.x + 140 + (idx * 20), rootCard.y);
+            });
+
+            if (recipe.id === 'melt_ice') document.getElementById('ice-mission')?.remove();
+
+        }
+
+        function removeCard(id) {
+            const index = cards.findIndex(c => c.id === id);
+            if (index !== -1) {
+                const card = cards[index];
+                const prevCard = card.prevId ? cards.find(c => c.id === card.prevId) : null;
+                const nextCard = card.nextId ? cards.find(c => c.id === card.nextId) : null;
+
+                // 연결 관계 재정립
+                if (prevCard) prevCard.nextId = card.nextId;
+                if (nextCard) {
+                    nextCard.prevId = card.prevId;
+                    if (!prevCard) nextCard.stackOrder = card.stackOrder;
+                }
+
+                card.element.remove();
+                cards.splice(index, 1);
+
+                const remainingCard = prevCard || nextCard;
+                if (remainingCard) settleStackFrom(getStackRoot(remainingCard));
+                updateAllStackVisuals();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('sol-val').innerText = currentSol;
+            document.getElementById('hp-val').innerText = `${crewHp}/3`;
+        }
+
+        function triggerGameOver(isWin, msg) {
+            isGameOver = true;
+            const modal = document.getElementById('modal');
+            document.getElementById('modal-title').innerText = isWin ? "MISSION SUCCESS!" : "MISSION FAILED";
+            document.getElementById('modal-title').style.color = isWin ? "#2ecc71" : "#e74c3c";
+            document.getElementById('modal-desc').innerText = msg;
+            modal.style.display = "flex";
+        }
+
+        // 실행 시작
+        window.onload = initGame;
+    </script>
+</body>
+</html>
