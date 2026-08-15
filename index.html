@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스페이스 스택: 화학 생존 V8</title>
+    <title>스페이스 스택: 화학 생존 V16</title>
     <style>
         :root {
             --bg-color: #0b0e14;
@@ -59,14 +59,28 @@
             border-right: 1px solid #30363d;
             z-index: 900;
         }
-        #mission-sidebar h3 {
+        .sidebar-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
             margin-bottom: 14px;
-            padding-bottom: 8px;
-            color: var(--accent);
-            font-size: 15px;
-            letter-spacing: 0.08em;
-            border-bottom: 1px solid #3f4752;
         }
+        .sidebar-tab {
+            padding: 9px;
+            color: #94a3b8;
+            font-weight: 700;
+            background: #111827;
+            border: 1px solid #3f4752;
+            border-radius: 7px;
+            cursor: pointer;
+        }
+        .sidebar-tab[aria-selected="true"] {
+            color: #ecfeff;
+            background: #164e63;
+            border-color: var(--accent);
+        }
+        .sidebar-panel[hidden] { display: none; }
+        .recipe-card::before { content: '📘'; }
         .mission-card {
             position: relative;
             padding: 16px 14px 15px;
@@ -86,6 +100,7 @@
         }
         .mission-card + .mission-card { margin-top: 12px; }
         .survival-mission::before { content: '👨‍🚀'; }
+        .explore-mission::before { content: '🔭'; }
         .mission-text {
             padding-right: 24px;
             color: #f8fafc;
@@ -162,8 +177,8 @@
             transition: left 0.16s ease-out, top 0.16s ease-out,
                         border-color 0.2s, box-shadow 0.2s, filter 0.2s;
         }
-        .card-header { font-size: 11px; color: #94a3b8; font-weight: bold; }
-        .card-title { font-size: 14px; font-weight: bold; color: #f8fafc; margin-top: 4px; }
+        .card-header { margin-top: 4px; font-size: 11px; color: #94a3b8; font-weight: bold; text-align: right; }
+        .card-title { font-size: 14px; font-weight: bold; color: #f8fafc; }
         .card-formula { font-size: 11px; color: var(--accent); margin-top: 2px; }
         .card-body { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 28px; }
         
@@ -172,7 +187,32 @@
         .card[data-cat="chem"] { border-color: #38bdf8; }
         .card[data-cat="energy"] { border-color: #facc15; background: #29250d; }
         .card[data-cat="equip"] { border-color: #a855f7; }
-        .card[data-cat="waste"] { border-color: #ef4444; }
+        .card[data-cat="sample"] {
+            border-color: #22d3ee;
+            border-radius: 0;
+            background: #12303a;
+            clip-path: polygon(
+                0 6px, 6px 6px, 6px 0, 14px 0, 14px 6px, 22px 6px, 22px 0,
+                30px 0, 30px 6px, 38px 6px, 38px 0, 46px 0, 46px 6px, 54px 6px,
+                54px 0, 62px 0, 62px 6px, 70px 6px, 70px 0, 78px 0, 78px 6px,
+                86px 6px, 86px 0, 94px 0, 94px 6px, 102px 6px, 102px 0, 110px 0,
+                110px 6px, 104px 6px, 104px 14px, 110px 14px, 110px 22px, 104px 22px,
+                104px 30px, 110px 30px, 110px 38px, 104px 38px, 104px 46px, 110px 46px,
+                110px 54px, 104px 54px, 104px 62px, 110px 62px, 110px 70px, 104px 70px,
+                104px 78px, 110px 78px, 110px 86px, 104px 86px, 104px 94px, 110px 94px,
+                110px 102px, 104px 102px, 104px 110px, 110px 110px, 110px 118px,
+                104px 118px, 104px 126px, 110px 126px, 110px 134px, 104px 134px,
+                104px 140px, 96px 140px, 96px 134px, 88px 134px, 88px 140px, 80px 140px,
+                80px 134px, 72px 134px, 72px 140px, 64px 140px, 64px 134px, 56px 134px,
+                56px 140px, 48px 140px, 48px 134px, 40px 134px, 40px 140px, 32px 140px,
+                32px 134px, 24px 134px, 24px 140px, 16px 140px, 16px 134px, 8px 134px,
+                8px 140px, 0 140px, 0 134px, 6px 134px, 6px 126px, 0 126px, 0 118px,
+                6px 118px, 6px 110px, 0 110px, 0 102px, 6px 102px, 6px 94px, 0 94px,
+                0 86px, 6px 86px, 6px 78px, 0 78px, 0 70px, 6px 70px, 6px 62px,
+                0 62px, 0 54px, 6px 54px, 6px 46px, 0 46px, 0 38px, 6px 38px,
+                6px 30px, 0 30px, 0 22px, 6px 22px, 6px 14px, 0 14px
+            );
+        }
 
         /* 반응 진행 프로그래스 바 */
         .progress-overlay {
@@ -212,16 +252,47 @@
 
     <!-- 메인 레이아웃 -->
     <div id="main-container">
-        <aside id="mission-sidebar" aria-label="현재 미션">
-            <h3>MISSION</h3>
-            <div class="mission-card survival-mission">
-                <div class="mission-text">10일 동안 생존하세요.</div>
-                <div class="mission-formula">우주 비행사는 매일 한 개의 산소가 필요합니다.</div>
+        <aside id="mission-sidebar" aria-label="게임 정보">
+            <div class="sidebar-tabs" role="tablist" aria-label="사이드바 보기">
+                <button id="mission-tab" class="sidebar-tab" type="button" role="tab" aria-selected="true" aria-controls="mission-panel" onclick="switchSidebarTab('mission')">임무</button>
+                <button id="recipe-tab" class="sidebar-tab" type="button" role="tab" aria-selected="false" aria-controls="recipe-panel" onclick="switchSidebarTab('recipe')">조합법</button>
             </div>
-            <div id="ice-mission" class="mission-card">
-                <div class="mission-text">얼음 덩어리를 녹여 물을 만드세요.</div>
-                <div class="mission-formula">얼음 덩어리 + 대원 → 물 (최대 3회)</div>
-            </div>
+            <section id="mission-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="mission-tab">
+                <div class="mission-card survival-mission">
+                    <div class="mission-text">10일 이내에 탈출하세요.</div>
+                    <div class="mission-formula">우주 비행사는 매일 한 개의 산소가 필요합니다.</div>
+                </div>
+                <div id="explore-mission" class="mission-card explore-mission">
+                    <div class="mission-text">탐사를 시작하세요.</div>
+                    <div class="mission-formula">탐사 + 대원 + 전력을 필요로 합니다.</div>
+                </div>
+                <div id="ice-mission" class="mission-card">
+                    <div class="mission-text">얼음 덩어리를 녹여 물을 만드세요.</div>
+                    <div class="mission-formula">얼음 덩어리 + 대원 → 물 (최대 3회)</div>
+                </div>
+                <div id="electrolysis-mission" class="mission-card" hidden>
+                    <div class="mission-text">물을 전기분해하세요.</div>
+                    <div class="mission-formula">물 2장 + 전력 → 수소 2장 + 산소 1장</div>
+                </div>
+            </section>
+            <section id="recipe-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="recipe-tab" hidden>
+                <div id="ice-recipe" class="mission-card recipe-card" hidden>
+                    <div class="mission-text">물 만들기</div>
+                    <div class="mission-formula">얼음 덩어리 + 대원 → 물</div>
+                </div>
+                <div id="electrolysis-recipe" class="mission-card recipe-card" hidden>
+                    <div class="mission-text">물 전기분해</div>
+                    <div class="mission-formula">물 2장 + 전력 → 수소 2장 + 산소 1장</div>
+                </div>
+                <div class="mission-card recipe-card">
+                    <div class="mission-text">메테인 만들기</div>
+                    <div class="mission-formula">이산화탄소 + 수소 4장 + 전력 → 메테인 + 물 2장</div>
+                </div>
+                <div class="mission-card recipe-card">
+                    <div class="mission-text">로켓 연료 만들기</div>
+                    <div class="mission-formula">메테인 1장 + 산소 2장 → 로켓 연료 1장</div>
+                </div>
+            </section>
         </aside>
 
         <!-- 카드 영역 -->
@@ -241,16 +312,21 @@
         // --- 1. 카드 데이터 및 레시피 정의 ---
         const CARD_TYPES = {
             CREW: { name: "우주비행사", formula: "Crew", cat: "crew", icon: "👨‍🚀" },
-            H2O2: { name: "과산화수소", formula: "H₂O₂", cat: "chem", icon: "🧪" },
-            MNO2: { name: "이산화망가니즈", formula: "MnO₂ (촉매)", cat: "chem", icon: "🪨" },
             ICE_CHUNK: { name: "얼음 덩어리", formula: "H₂O(s)", cat: "chem", icon: "🧊" },
             H2O:  { name: "물", formula: "H₂O", cat: "chem", icon: "💧" },
             O2:   { name: "산소", formula: "O₂", cat: "chem", icon: "🫧" },
             H2:   { name: "수소", formula: "H₂", cat: "chem", icon: "🎈" },
-            CO2:  { name: "이산화탄소", formula: "CO₂", cat: "waste", icon: "🌫️" },
+            CO2:  { name: "이산화탄소", formula: "CO₂", cat: "chem", icon: "🌫️" },
+            CH4:  { name: "메테인", formula: "CH₄", cat: "chem", icon: "🔥" },
             ENERGY: { name: "전기에너지", formula: "전력", cat: "energy", icon: "🔋" },
-            SOLAR: { name: "태양열 발전기", formula: "30초마다 발전", cat: "equip", icon: "☀️" }
+            ROCKET_FUEL: { name: "로켓 연료", formula: "CH₄ + 2O₂", cat: "energy", icon: "⛽" },
+            SOLAR: { name: "태양광 발전", formula: "20초마다 발전", cat: "equip", icon: "☀️" },
+            EXPLORE: { name: "탐사", formula: "대원·에너지와 쌓기 · 20초", cat: "equip", icon: "🔭" },
+            RESOURCE_SAMPLE: { name: "자원 샘플", formula: "클릭해서 개봉", cat: "sample", icon: "📦" },
+            EMPTY_ROCKET: { name: "빈 로켓", formula: "연료 3개 필요", cat: "equip", icon: "🚀" }
         };
+
+        const RESOURCE_POOL = Object.keys(CARD_TYPES).filter(type => CARD_TYPES[type].cat === 'chem');
 
         // 화학 반응 레시피 목록
         const RECIPES = [
@@ -263,14 +339,11 @@
                 outputs: ['H2O']
             },
             {
-                id: "h2o2_decomp",
-                time: 3000, // 3초
-                // 조합에 필요한 카드 목록 (타입과 개수)
-                inputs: { H2O2: 2, MNO2: 1, CREW: 1 },
-                // 반응 후 소모되는 카드의 수량
-                consume: { H2O2: 2 },
-                // 새롭게 생성되는 결과물
-                outputs: ['H2O', 'H2O', 'O2']
+                id: "methanation",
+                time: 4000,
+                inputs: { CO2: 1, H2: 4, ENERGY: 1 },
+                consume: { CO2: 1, H2: 4, ENERGY: 1 },
+                outputs: ['CH4', 'H2O', 'H2O']
             },
             {
                 id: "electrolysis",
@@ -278,6 +351,27 @@
                 inputs: { H2O: 2, ENERGY: 1 },
                 consume: { H2O: 2, ENERGY: 1 },
                 outputs: ['H2', 'H2', 'O2']
+            },
+            {
+                id: "explore",
+                time: 20000,
+                inputs: { EXPLORE: 1, CREW: 1, ENERGY: 1 },
+                consume: { ENERGY: 1 },
+                outputs: ['RESOURCE_SAMPLE']
+            },
+            {
+                id: "rocket_fuel",
+                time: 4000,
+                inputs: { CH4: 1, O2: 2 },
+                consume: { CH4: 1, O2: 2 },
+                outputs: ['ROCKET_FUEL']
+            },
+            {
+                id: "escape",
+                time: 0,
+                inputs: { EMPTY_ROCKET: 1, ROCKET_FUEL: 3 },
+                consume: { ROCKET_FUEL: 3 },
+                outputs: []
             }
         ];
 
@@ -290,22 +384,33 @@
         let solTimer = 0;
         const solDuration = 60000; // 1Sol당 1분
         let solarTimer = 0;
-        const solarDuration = 30000;
+        const solarDuration = 20000;
         let isGameOver = false;
         let stackOrderCounter = 0;
 
         const STACK_OFFSET_Y = 30;
         const CARD_WIDTH = 110;
         const CARD_HEIGHT = 140;
+        const CARD_GAP = 16;
 
         const board = document.getElementById('game-board');
 
         // --- 3. 초기화 및 생명주기 ---
+        function switchSidebarTab(tabName) {
+            const showMissions = tabName === 'mission';
+            document.getElementById('mission-panel').hidden = !showMissions;
+            document.getElementById('recipe-panel').hidden = showMissions;
+            document.getElementById('mission-tab').setAttribute('aria-selected', showMissions);
+            document.getElementById('recipe-tab').setAttribute('aria-selected', !showMissions);
+        }
+
         function initGame() {
             // 초기 스폰 카드 설정
             spawnCard('CREW', 200, 200);
             spawnCard('ICE_CHUNK', 350, 200);
             spawnCard('SOLAR', 500, 200);
+            spawnCard('EXPLORE', 650, 200);
+            spawnCard('EMPTY_ROCKET', 800, 200);
 
             updateUI();
             requestAnimationFrame(gameLoop);
@@ -313,11 +418,12 @@
 
         function spawnCard(typeKey, x, y) {
             const cardData = CARD_TYPES[typeKey];
+            const freePosition = findFreePosition(x, y);
             const card = {
                 id: cardIdCounter++,
                 type: typeKey,
-                x: x,
-                y: y,
+                x: freePosition.x,
+                y: freePosition.y,
                 nextId: null, // 아래에 쌓인 카드 ID
                 prevId: null, // 위에 쌓인 카드 ID
                 uses: typeKey === 'ICE_CHUNK' ? 3 : null,
@@ -329,14 +435,14 @@
             el.className = 'card';
             el.dataset.id = card.id;
             el.dataset.cat = cardData.cat;
-            el.style.left = `${x}px`;
-            el.style.top = `${y}px`;
+            el.style.left = `${card.x}px`;
+            el.style.top = `${card.y}px`;
 
             el.innerHTML = `
-                <div class="card-header">${cardData.cat.toUpperCase()}</div>
                 <div class="card-title">${cardData.name}</div>
                 <div class="card-formula">${cardData.formula}${card.uses === null ? '' : ` · ${card.uses}회 남음`}</div>
                 <div class="card-body">${cardData.icon}</div>
+                <div class="card-header">${cardData.cat.toUpperCase()}</div>
                 <div class="progress-overlay"><div class="progress-inner"></div></div>
             `;
 
@@ -363,6 +469,54 @@
                 curr = cards.find(c => c.id === curr.prevId);
             }
             return curr || card;
+        }
+
+        function findFreePosition(preferredX, preferredY, stackLength = 1, excludedIds = new Set()) {
+            const width = CARD_WIDTH;
+            const height = CARD_HEIGHT + ((stackLength - 1) * STACK_OFFSET_Y);
+            const maxX = Math.max(0, (board.clientWidth || 1200) - width);
+            const maxY = Math.max(0, (board.clientHeight || 800) - height);
+
+            const isFree = (x, y) => cards
+                .filter(card => card.prevId === null && !excludedIds.has(card.id))
+                .every(root => {
+                    const otherStack = getStackCards(root);
+                    const otherHeight = CARD_HEIGHT + ((otherStack.length - 1) * STACK_OFFSET_Y);
+                    return x + width + CARD_GAP <= root.x ||
+                           x >= root.x + CARD_WIDTH + CARD_GAP ||
+                           y + height + CARD_GAP <= root.y ||
+                           y >= root.y + otherHeight + CARD_GAP;
+                });
+
+            const preferred = {
+                x: Math.max(0, Math.min(preferredX, maxX)),
+                y: Math.max(0, Math.min(preferredY, maxY))
+            };
+            if (isFree(preferred.x, preferred.y)) return preferred;
+
+            let nearest = null;
+            let nearestDistance = Infinity;
+            for (let y = 0; y <= maxY; y += CARD_GAP) {
+                for (let x = 0; x <= maxX; x += CARD_GAP) {
+                    if (isFree(x, y)) {
+                        const distance = ((x - preferred.x) ** 2) + ((y - preferred.y) ** 2);
+                        if (distance < nearestDistance) {
+                            nearest = { x, y };
+                            nearestDistance = distance;
+                        }
+                    }
+                }
+            }
+            return nearest || preferred;
+        }
+
+        function placeStackInFreeSlot(root) {
+            const stack = getStackCards(root);
+            const excludedIds = new Set(stack.map(card => card.id));
+            const position = findFreePosition(root.x, root.y, stack.length, excludedIds);
+            root.x = position.x;
+            root.y = position.y;
+            settleStackFrom(root);
         }
 
         function updateAllStackVisuals() {
@@ -399,6 +553,7 @@
         function makeDraggable(card) {
             let startX, startY, initialCardX, initialCardY;
             let isDragging = false;
+            let hasMoved = false;
             let activePointerId = null;
 
             const el = card.element;
@@ -409,6 +564,7 @@
                 if (isDragging) return;
                 e.preventDefault();
                 isDragging = true;
+                hasMoved = false;
                 activePointerId = e.pointerId;
                 el.setPointerCapture(e.pointerId);
                 startX = e.clientX;
@@ -445,6 +601,7 @@
                 e.preventDefault();
                 const dx = e.clientX - startX;
                 const dy = e.clientY - startY;
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasMoved = true;
 
                 // 연결된 전체 스택 이동
                 let curr = card;
@@ -469,11 +626,25 @@
                 document.removeEventListener('pointerup', onPointerUp);
                 document.removeEventListener('pointercancel', onPointerUp);
 
+                if (e.type === 'pointerup' && card.type === 'RESOURCE_SAMPLE' && !hasMoved) {
+                    openResourceSample(card);
+                    return;
+                }
+
                 // 스택 결합 감지 (다른 스택의 맨 아래 카드 상단 근처에 놓았는지 확인)
                 checkStackSnap(card);
 
                 getStackCards(card).forEach(c => c.element.classList.remove('is-dragging'));
                 updateAllStackVisuals();
+            }
+        }
+
+        function openResourceSample(card) {
+            const { x, y } = card;
+            removeCard(card.id);
+            for (let i = 0; i < 3; i++) {
+                const type = RESOURCE_POOL[Math.floor(Math.random() * RESOURCE_POOL.length)];
+                spawnCard(type, x + (i * 130), y);
             }
         }
 
@@ -505,10 +676,10 @@
             if (bestTarget) {
                 connectCards(bestTarget.tail, draggedCard);
                 bestTarget.root.stackOrder = ++stackOrderCounter;
-                settleStackFrom(bestTarget.root);
+                placeStackInFreeSlot(bestTarget.root);
             } else {
                 draggedCard.stackOrder = ++stackOrderCounter;
-                settleStackFrom(draggedCard);
+                placeStackInFreeSlot(draggedCard);
             }
         }
 
@@ -582,7 +753,7 @@
             if (crewHp <= 0) {
                 triggerGameOver(false, "산소가 부족하여 대원이 생존하지 못했습니다.");
             } else if (currentSol > maxSol) {
-                triggerGameOver(true, "🎉 10 Sol 동안 우주기지에서 무사히 생존하였습니다! 구조에 성공했습니다!");
+                triggerGameOver(false, "식량이 부족하여 대원이 생존하지 못했습니다.");
             }
         }
 
@@ -684,7 +855,21 @@
                 spawnCard(outType, rootCard.x + 140 + (idx * 20), rootCard.y);
             });
 
-            if (recipe.id === 'melt_ice') document.getElementById('ice-mission')?.remove();
+            if (recipe.id === 'melt_ice') {
+                document.getElementById('ice-mission')?.remove();
+                document.getElementById('ice-recipe').hidden = false;
+                const nextMission = document.getElementById('electrolysis-mission');
+                if (nextMission) nextMission.hidden = false;
+            }
+            if (recipe.id === 'electrolysis') {
+                const mission = document.getElementById('electrolysis-mission');
+                if (mission && !mission.hidden) {
+                    mission.remove();
+                    document.getElementById('electrolysis-recipe').hidden = false;
+                }
+            }
+            if (recipe.id === 'explore') document.getElementById('explore-mission')?.remove();
+            if (recipe.id === 'escape') triggerGameOver(true, '탈출 성공');
 
         }
 
